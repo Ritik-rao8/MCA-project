@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Step through identical memory requests in two Verilog cache designs with an interactive cache model.">
+  <title>Cache Explorer</title>
+  <link rel="icon" href="favicon.svg">
+  <link rel="stylesheet" href="style.css">
+  <script src="data.js" defer></script>
+  <script src="model.js" defer></script>
+  <script src="script.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="#top"><span class="brand-icon" aria-hidden="true"></span>Cache Explorer</a>
+      <nav aria-label="Page sections">
+        <a href="#simulator">Simulator</a>
+        <a href="#measurements">RTL results</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top" class="wrap">
+    <section class="intro" aria-labelledby="title">
+      <div>
+        <h1>How a cache decides<br class="wide-only"> what to keep</h1>
+        <p>Send the same address to both caches. See which block stays, which one leaves, and how many cycles each request takes.</p>
+      </div>
+      <dl class="specs">
+        <div><dt>Capacity</dt><dd>64 bytes each</dd></div>
+        <div><dt>Block size</dt><dd>4 bytes</dd></div>
+        <div><dt>Memory delay</dt><dd>3 cycles</dd></div>
+      </dl>
+    </section>
+
+    <section id="simulator" class="simulator" aria-labelledby="sim-title">
+      <div class="sim-toolbar">
+        <div class="select-group">
+          <h2 id="sim-title">Cache simulator</h2>
+          <label for="scenario">Choose a scenario</label>
+          <select id="scenario">
+            <optgroup label="Short demos">
+              <option value="lru_demo">How LRU chooses what to evict (4)</option>
+              <option value="conflict_demo">Two addresses collide (4)</option>
+              <option value="write_demo">Write a byte and read it back (3)</option>
+            </optgroup>
+            <optgroup label="Full Verilog workloads">
+              <option value="conflict">Alternating conflict (16)</option>
+              <option value="repeated">Repeated address (16)</option>
+              <option value="sequential">Sequential bytes (128)</option>
+              <option value="lru">LRU replacement (7)</option>
+              <option value="capacity">Capacity overflow (64)</option>
+              <option value="three_blocks">Three colliding blocks (24)</option>
+              <option value="mixed">Mixed reads and writes (196)</option>
+            </optgroup>
+            <option value="custom">My own addresses</option>
+          </select>
+        </div>
+        <div class="controls" aria-label="Simulation controls">
+          <button id="reset" type="button">Reset</button>
+          <button id="previous" type="button">Previous</button>
+          <button id="play" type="button" aria-pressed="false">Play</button>
+          <button id="next" class="primary" type="button">Next access <span aria-hidden="true">→</span></button>
+        </div>
+      </div>
+      <div class="queue-section">
+        <div class="queue-heading"><strong>Memory requests</strong><span id="progress" class="mono"></span></div>
+        <div id="queue" class="queue" role="group" aria-label="Jump to a request"></div>
+        <div id="seek-row" class="seek-row" hidden>
+          <label for="seek">Jump to request</label>
+          <input id="seek" type="range" min="0" value="0" step="1">
+        </div>
+      </div>
+      <div class="workspace">
+        <div class="explanation">
+          <div class="request">
+            <p id="request-label" class="request-label"></p>
+            <p id="request-address" class="request-address mono"></p>
+          </div>
+          <p id="narration" role="status" aria-atomic="true"></p>
+        </div>
+        <div id="caches" class="cache-grid"></div>
+        <details id="details" class="drawer">
+          <summary>Address bits and controller cycles</summary>
+          <div id="details-content" class="details-grid"></div>
+        </details>
+        <details id="all-lines" class="drawer">
+          <summary>Show all cache lines</summary>
+          <div id="all-lines-content" class="details-grid"></div>
+        </details>
+      </div>
+      <details id="custom" class="custom">
+        <summary>Build your own trace</summary>
+        <form id="custom-form">
+          <label>Hex address <input id="address" value="0040" maxlength="6" autocomplete="off" spellcheck="false" required></label>
+          <label>Operation <select id="operation"><option value="read">Read</option><option value="write">Write</option></select></label>
+          <label>Hex byte <input id="byte" value="2A" maxlength="4" autocomplete="off" spellcheck="false" disabled required></label>
+          <button type="submit">Add request</button>
+          <button id="clear-custom" type="button">Clear custom trace</button>
+        </form>
+        <p id="form-error" role="alert"></p>
+      </details>
+    </section>
+
+    <section id="measurements" class="measurements" aria-labelledby="measure-title">
+      <div class="measure-heading">
+        <div>
+          <h2 id="measure-title">Measured in Verilog</h2>
+          <p>Both caches start empty. The same trace runs on each design at three cycles of memory delay.</p>
+        </div>
+        <button type="button" id="download">Download comparison CSV</button>
+      </div>
+      <div class="table-scroll" tabindex="0" role="region" aria-label="Measured RTL hit rates and total service cycles">
+        <table>
+          <thead><tr><th scope="col">Workload</th><th scope="col">Direct-mapped</th><th scope="col">Two-way LRU</th></tr></thead>
+          <tbody id="results"></tbody>
+        </table>
+      </div>
+    </section>
+    <footer>The simulator uses a JavaScript model checked against 902 Verilog responses. Both designs use write-through and write-allocate.</footer>
+    <noscript><p>Enable JavaScript to run the interactive simulator.</p></noscript>
+  </main>
+</body>
+</html>

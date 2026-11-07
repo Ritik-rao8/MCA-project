@@ -1,0 +1,191 @@
+\input{preamble}
+\title{A Two-Way LRU Cache Prototype in Verilog\\
+\large Phase I Project Report}
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We developed a Verilog prototype to show how cache associativity changes
+block placement and replacement. The prototype pairs a direct-mapped baseline
+with a two-way cache that uses least recently used (LRU) replacement.
+Both designs hold 64 bytes in four-byte blocks. A directed test fills both
+ways of one set, reads the older block again, and then requests a third
+block. The two-way controller keeps the block that was just read and evicts
+the other one. A shared testbench checks this behavior, returned bytes,
+and time to complete each access.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Cache memory, Verilog, set associativity, least recently used
+\end{IEEEkeywords}
+
+\section{Introduction}
+A cache retains recently accessed blocks so the CPU can satisfy some
+requests without waiting for main memory. A direct-mapped cache gives a
+block one possible location. Two frequently accessed blocks that share
+that location can displace each other even when other lines are empty.
+The design question for this prototype is whether two slots in a selected
+set retain such blocks at the same total data capacity. The prototype also
+makes the victim selection visible when a third block needs the same set.
+
+\section{Literature Review}
+Smith surveys cache design choices such as placement, replacement, block size,
+and memory update policy \cite{smith}. Placement limits the possible slots
+for a block. Replacement chooses a slot when those locations are occupied.
+Hill and Smith use address traces to study how associativity changes miss
+ratios and to isolate causes of misses \cite{hill}. We use short, identical
+request sequences to show exactly which address causes each hit, miss,
+or eviction in the prototype.
+
+\section{Proposed Solution}
+The testbench supplies byte reads and writes to one cache at a time. The
+controller saves the request when idle, then compares tags in the selected
+location. A hit requires a matching tag and an asserted valid bit. The two-way
+design compares its two tags in parallel. On a miss, the controller fetches
+the aligned four-byte block from the memory model.
+
+\begin{table}[!t]
+\caption{Cache Geometry and Address Fields}
+\label{tab:geom1}
+\centering
+\begin{tabular}{lcc}
+\toprule
+ & Direct-mapped & Two-way LRU\\
+\midrule
+Sets $\times$ ways & $16\times1$ & $8\times2$\\
+Data capacity & 64 B & 64 B\\
+Block size & 4 B & 4 B\\
+Tag bits & $[15:6]$ & $[15:5]$\\
+Index bits & $[5:2]$ & $[4:2]$\\
+Byte offset bits & $[1:0]$ & $[1:0]$\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Decoding an Address}
+Table~\ref{tab:geom1} defines the 16-bit byte address fields. For example,
+\texttt{0x0043} selects two-way set 0 with tag 2. Its offset is 3, so it
+uses the fourth byte of the block starting at \texttt{0x0040}. The same
+address maps to direct line 0 with tag 1.
+
+\subsection{Filling and Replacing Blocks}
+A two-way miss uses an invalid slot first. When both ways are valid, the
+set's LRU bit points to the way to replace. A hit or fill makes its way
+most recently used, so the controller saves the other way as the next
+victim. One bit suffices because the set holds just two ways.
+
+\subsection{Finishing Reads and Writes}
+A read returns one byte. A write updates only the addressed byte. With
+write-allocate, a write miss first fetches the block. With write-through,
+every write then sends the selected byte to memory and waits for
+acknowledgment. The seven controller states accept the CPU request, check
+tags, issue and wait for a refill, issue and wait for a write, and return
+the response. Read hits proceed from lookup directly to response.
+
+\section{Prototype Verification}
+Table~\ref{tab:lru} shows the first four requests of the directed demo.
+The third request hits A and makes B the next victim. C then evicts B.
+The testbench follows up by reading A again and then B. A hits and B
+misses, confirming the contents of the set through the normal CPU interface.
+Each block maps to line 0 in direct mapping, where each different block
+overwrites the previous one. Across these six reads, direct mapping
+takes 42 service cycles with zero hits and the two-way cache takes
+32 cycles with two hits.
+
+\begin{table}[!t]
+\caption{Two-Way Set 0 After Each Demo Access}
+\label{tab:lru}
+\centering
+\footnotesize
+\begin{tabular}{lcccl}
+\toprule
+Read address & Result & Way 0 & Way 1 & Next victim\\
+\midrule
+A (\texttt{0000}) & Miss & A & Empty & Empty way\\
+B (\texttt{0040}) & Miss & A & B & A\\
+A (\texttt{0000}) & Hit & A & B & B\\
+C (\texttt{0080}) & Miss & A & C & A\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Reproducing the Demonstration}
+From the project root, \texttt{./run.sh demo} compiles both designs with
+Icarus Verilog, prints each result, and saves a waveform for each cache.
+In \texttt{2way\_demo.vcd}, \texttt{cpu\_req} marks the request
+and \texttt{cpu\_done} marks completion. On a miss, \texttt{mem\_req}
+requests the block and \texttt{mem\_done} acknowledges it. Figure~\ref{fig:wave}
+shows these signals on the third and fourth reads. Counting from the
+accepting clock edge, the hit completes at 225 ns (two cycles) and the
+miss completes at 305 ns (seven cycles). The final two reads then
+confirm the eviction through the CPU interface.
+
+\begin{figure}[!t]
+\centering
+\setlength{\unitlength}{1pt}
+\begin{picture}(236,116)
+\scriptsize
+\put(85,105){\makebox(0,0){A hits}}
+\put(163,105){\makebox(0,0){C misses}}
+\put(5,88){\texttt{cpu\_req}}
+\put(5,69){\texttt{mem\_req}}
+\put(5,50){\texttt{mem\_done}}
+\put(5,31){\texttt{cpu\_done}}
+\thicklines
+\put(63,93){\line(1,0){15}}
+\put(78,86){\line(0,1){7}}
+\put(78,86){\line(1,0){30}}
+\put(108,86){\line(0,1){7}}
+\put(108,93){\line(1,0){15}}
+\put(123,86){\line(0,1){7}}
+\put(123,86){\line(1,0){105}}
+\put(63,67){\line(1,0){67.5}}
+\put(130.5,67){\line(0,1){7}}
+\put(130.5,74){\line(1,0){15}}
+\put(145.5,67){\line(0,1){7}}
+\put(145.5,67){\line(1,0){82.5}}
+\put(63,48){\line(1,0){127.5}}
+\put(190.5,48){\line(0,1){7}}
+\put(190.5,55){\line(1,0){15}}
+\put(205.5,48){\line(0,1){7}}
+\put(205.5,48){\line(1,0){22.5}}
+\put(63,36){\line(1,0){7.5}}
+\put(70.5,29){\line(0,1){7}}
+\put(70.5,29){\line(1,0){30}}
+\put(100.5,29){\line(0,1){7}}
+\put(100.5,36){\line(1,0){15}}
+\put(115.5,29){\line(0,1){7}}
+\put(115.5,29){\line(1,0){105}}
+\put(220.5,29){\line(0,1){7}}
+\put(220.5,36){\line(1,0){7.5}}
+\thinlines
+\put(63,17){\line(1,0){165}}
+\multiput(63,14)(30,0){6}{\line(0,1){3}}
+\put(63,7){\makebox(0,0){200}}
+\put(93,7){\makebox(0,0){220}}
+\put(123,7){\makebox(0,0){240}}
+\put(153,7){\makebox(0,0){260}}
+\put(183,7){\makebox(0,0){280}}
+\put(213,7){\makebox(0,0){300}}
+\put(228,7){\makebox(0,0){ns}}
+\end{picture}
+\caption{Signals from the two-way demo for the second read of A
+and the first read of C. The testbench clock period is 10 ns.}
+\label{fig:wave}
+\end{figure}
+
+\newpage
+\section{Phase II Evaluation Plan}
+The next phase compares hit rate and total service cycles across seven
+workloads, including two-block conflicts, three blocks in one set,
+sequential and repeated reads, capacity overflow, and mixed reads and
+writes. Both designs use the same initial memory, empty cache state,
+and memory delay for every run. Generic synthesis compares their
+register and logic cell counts.
+
+\section{Individual Contributions}
+The five author names and their individual contributions are pending
+team confirmation.
+
+\input{references}
+\end{document}
